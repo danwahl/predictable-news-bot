@@ -72,14 +72,14 @@ def main():
         # Set GraphQL logging level (defaults to INFO otherwise
         log.setLevel(logging.WARNING)
 
-        # Create GraphQL client using requests transport
+        # Create GraphQL transport using requests
         # https://gql.readthedocs.io/en/latest/transports/requests.html
         transport = RequestsHTTPTransport(
             url="https://metaforecast.org/api/graphql")
-        client = Client(transport=transport, fetch_schema_from_transport=True)
 
-        # Execute GraphQL query
-        result = client.execute(QUERY)
+        # Create client and execute GraphQL query
+        result = Client(transport=transport,
+                        fetch_schema_from_transport=True).execute(QUERY)
     except Exception as e:
         logging.error(f"Failed to fetch data: {e}")
         return
