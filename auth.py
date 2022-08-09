@@ -6,7 +6,7 @@ import tweepy
 def auth():
     load_dotenv()
 
-    # https://docs.tweepy.org/en/latest/authentication.html#pin-based-oauth
+    # https://docs.tweepy.org/en/v4.10.0/authentication.html#pin-based-oauth
     oauth1_user_handler = tweepy.OAuth1UserHandler(
         consumer_key=os.getenv("CONSUMER_KEY"),
         consumer_secret=os.getenv("CONSUMER_SECRET"),
@@ -19,6 +19,7 @@ def auth():
     access_token, access_token_secret = oauth1_user_handler.get_access_token(
         verifier)
 
+    print("Add the following to your .env file:")
     print(f"ACCESS_TOKEN={access_token}")
     print(f"ACCESS_TOKEN_SECRET={access_token_secret}")
 
