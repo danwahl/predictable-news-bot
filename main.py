@@ -10,11 +10,11 @@ import pandas as pd
 import sys
 import tweepy
 
-# Default probability difference threshold, above which a tweet is sent
-DIFF_THRESHOLD = 0.05
+# Default probability change threshold, above which a tweet is sent
+CHANGE_THRESHOLD = 0.05
 
-# GraphQL query to get the history of all 4+ star rated questions (using space as pseudo-wildcard)
-QUERY = gql("""
+# GraphQL query to get the history of all 4+ star rated questions (using " " as pseudo-wildcard)
+SEARCH_QUERY = gql("""
 {
   searchQuestions(input: {query: " ", starsThreshold: 4, limit: 1000}) {
     history {
@@ -40,7 +40,7 @@ def get_gql_client():
         log.setLevel(logging.WARNING)
 
         # Create GraphQL transport using requests
-        # https://gql.readthedocs.io/en/latest/transports/requests.html
+        # https://gql.readthedocs.io/en/v3.4.0/transports/requests.html
         transport = RequestsHTTPTransport(
             url="https://metaforecast.org/api/graphql")
 
@@ -48,7 +48,7 @@ def get_gql_client():
         return Client(transport=transport,
                       fetch_schema_from_transport=True)
     except Exception as e:
-        logging.error(f"Failed to fetch data: {e}")
+        logging.error(f"Failed to create GraphQL client: {e}")
         return None
 
 
@@ -58,7 +58,7 @@ def get_tweepy_client():
         load_dotenv()
 
         # Create Twitter client
-        # https://docs.tweepy.org/en/stable/authentication.html#id3
+        # https://docs.tweepy.org/en/v4.10.0/authentication.html#id3
         return tweepy.Client(
             consumer_key=os.getenv("CONSUMER_KEY"),
             consumer_secret=os.getenv("CONSUMER_SECRET"),
@@ -66,22 +66,25 @@ def get_tweepy_client():
             access_token_secret=os.getenv("ACCESS_TOKEN_SECRET")
         )
     except Exception as e:
-        logging.error(f"Failed to login: {e}")
+        logging.error(f"Failed to create Twitter client: {e}")
         return None
 
 
 def main():
-    # Configure logging
-    logging.basicConfig(level=logging.INFO)
-
     # Parse arguments
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-d", "--diff", type=int, default=DIFF_THRESHOLD,
-                        help="probability difference threshold for tweeting")
+    parser.add_argument("-c", "--change", type=int, default=CHANGE_THRESHOLD,
+                        help="probability change threshold for tweeting")
+    parser.add_argument("-d", "--debug", action="store_true",
+                        help="enable debug logging")
     parser.add_argument("-t", "--tweet", action="store_true",
                         help="actually send tweets")
     args = parser.parse_args()
+
+    # Configure logging
+    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
+
     logging.debug(f"Args: {args}")
 
     tweepy_client = get_tweepy_client()
@@ -102,14 +105,14 @@ def main():
         sys.exit(1)
 
     try:
-        # Execute GraphQL query
-        result = gql_client.execute(QUERY)
+        # Execute GraphQL search query
+        result = gql_client.execute(SEARCH_QUERY)
     except:
         logging.error("Failed to execute query")
         sys.exit(1)
 
     # Script expects to runs daily, so ignore data from before this datetime
-    dt = datetime.now() - timedelta(hours=23)
+    last_run = datetime.now() - timedelta(days=1)
 
     # Iterate through all questions
     for i in range(len(result["searchQuestions"])):
@@ -146,12 +149,13 @@ def main():
                 f"Skipping question {question['id']} because it has only {history.shape[0]} row(s)")
             continue
         # Ignore this question if the most recent datetime is too old
-        elif history.index[-1] < dt:
+        elif history.index[-1] < last_run:
             logging.debug(
-                f"Skipping {question['id']} because {history.index[-1]} is earlier than {dt}")
+                f"Skipping {question['id']} because {history.index[-1]} is before {last_run}")
             continue
 
         # Calculate the difference for each option between the most recent rows
+        # TODO(drw): this assumes that rows are separated by ~one day, which may not be true
         options = pd.concat(
             [history.iloc[-1], history.diff().iloc[-1]], axis=1)
         options.columns = ["probability", "diff"]
@@ -166,12 +170,12 @@ def main():
         # 37.1% to 37.3%      0.009615  0.000606
         # 37.4% to 37.6%      0.009615  0.000606
 
-        # Get the option names that are equal to or above the difference threshold, if any
-        names = options.index[options["diff"].abs() >= args.diff].values
+        # Get the option names that are gte the change threshold, if any
+        names = options.index[options["diff"].abs() >= args.change].values
         # Skip questions with no options above the threshold
         if len(names) == 0:
             logging.debug(
-                "Skipping {question['id']} because no options are above threshold")
+                f"Skipping {question['id']} because no options are above change threshold")
             continue
 
         # Compose the tweet text
