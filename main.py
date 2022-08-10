@@ -10,13 +10,13 @@ import pandas as pd
 import sys
 import tweepy
 
-# Default probability change threshold, above which a tweet is sent
+# Default probability change threshold, at or above which a tweet is sent
 CHANGE_THRESHOLD = 0.05
 
 # GraphQL query to get the history of all 4+ star rated questions (using " " as pseudo-wildcard)
 SEARCH_QUERY = gql("""
 {
-  searchQuestions(input: {query: " ", starsThreshold: 4, limit: 1000}) {
+  searchQuestions(input: {query: " ", starsThreshold: 4, limit: 100}) {
     history {
       fetched
       options {
@@ -118,7 +118,7 @@ def main():
     for i in range(len(result["searchQuestions"])):
         question = result["searchQuestions"][i]
 
-        # Get each probability history for all option for this question
+        # Get each probability history for all options for this question
         df = pd.json_normalize(question["history"],
                                record_path=["options"], meta="fetched")
         # >>> df.tail()
@@ -188,7 +188,7 @@ def main():
         # Generate Metaforecast url (would use market url directly, but some are long)
         url = f"\nhttps://metaforecast.org/questions/{question['id']}"
 
-        # Append url to tweet text, trimming as needed so that it fits
+        # Append url, trimming text as needed so that it fits in tweet length
         if len(text) > (TWEET_LENGTH - len(url)):
             text = f"{text[:(TWEET_LENGTH - len(url) - 1)]}…"
         text += url
@@ -205,10 +205,10 @@ def main():
                 logging.debug(f"Tweeting: {text}")
                 tweepy_client.create_tweet(reply_settings="mentionedUsers",
                                            text=text, user_auth=True)
-                sleep(1)
             except Exception as e:
                 logging.error(f"Failed to tweet: {e}")
-                continue
+            finally:
+                sleep(0.1)
         else:
             logging.info(f"Would tweet: {text}")
 
