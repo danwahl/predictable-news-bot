@@ -14,9 +14,9 @@ import tweepy
 CHANGE_THRESHOLD = 0.05
 
 # GraphQL query to get the history of all 4+ star rated questions (using " " as pseudo-wildcard)
-SEARCH_QUERY = gql("""
+FRONTPAGE_QUERY = gql("""
 {
-  searchQuestions(input: {query: " ", starsThreshold: 4, limit: 100}) {
+  frontpage {
     history {
       fetched
       options {
@@ -106,7 +106,7 @@ def main():
 
     try:
         # Execute GraphQL search query
-        result = gql_client.execute(SEARCH_QUERY)
+        result = gql_client.execute(FRONTPAGE_QUERY)
     except:
         logging.error("Failed to execute query")
         sys.exit(1)
@@ -115,8 +115,8 @@ def main():
     last_run = datetime.now() - timedelta(days=1)
 
     # Iterate through all questions
-    for i in range(len(result["searchQuestions"])):
-        question = result["searchQuestions"][i]
+    for i in range(len(result["frontpage"])):
+        question = result["frontpage"][i]
 
         # Get each probability history for all options for this question
         df = pd.json_normalize(question["history"],
